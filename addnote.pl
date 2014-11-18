@@ -33,6 +33,8 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Mon Nov 17 14:54:31 MST 2014
 # Rev: 
+#          0.3 - Remove duplicate definition of variable. 
+#          0.2 - Make more efficient and better log output. 
 #          0.1 - Dev. 
 #
 ####################################################
@@ -49,7 +51,7 @@ use Getopt::Std;
 $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
 $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
-my $VERSION   = qq{0.1};
+my $VERSION   = qq{0.3};
 my $WORK_DIR  = qq{/tmp};
 
 #
@@ -106,82 +108,52 @@ sub init
 }
 
 init();
-
-open LOG, ">".$WORK_DIR."/addnote.log" or die "Error opening log file: $!\n";
-# Appends value to an existing VED record if one exists.
-# param:  field string - name of the VED record to append to, like 'NOTE'. Do not include the '.' at the beginning or
-#         or end of the field name. The field must start with the argument name exactly - case sensitive.
-# return: List - argument list returned with the specified VED record updated.
-sub updateNoteVED
+my $patronFile = $WORK_DIR."/patron.flat";
+my $patronTMP  = $WORK_DIR . "/patron.tmp";
+open TMP_PATRON, ">$patronTMP" or die "Error writing tmp '$patronTMP': $!\n";
+while (<>)
 {
-	my ( $newValue, @VEDFields ) = @_;
-	my @newVED = ();
-	chomp( $newValue );
+	print TMP_PATRON;
+}
+close TMP_PATRON;
+`cat "$patronTMP" | seluser -iB -oU | dumpflatuser >$patronFile`;
+	
+# Update the user's account. Now it turns out that on the recommendation of Margaret Pelfrey 
+# you need get the entire record from dumpflatuser, modify the contents, and overlay the record
+# over the original.
+# 1) zero out the email. Now we have to remove the record not just empty it.
+# `echo "$barCode||" | edituserved -b -eEMAIL -l"ADMIN|PCGUI-DISP" -t1`;
+# 2) edit the note field to include previous notes and the requested message.
+
+my $noteField = $opt{'m'};
+my $patronModifiedFile = $WORK_DIR."/patron_mod.flat";
+# TODO: open and read the flat unmodified customer flat file.
+open PATRON, "<$patronFile" or die "Error reading '$patronFile': $!\n";
+open UPDATEPATRON, ">$patronModifiedFile" or die "Error creating '$patronModifiedFile': $!\n";
+while (<PATRON>)
+{
+my @VEDFields = split( '\n' );
 	while ( @VEDFields )
 	{
 		my $VEDField = shift( @VEDFields );
 		if ( $VEDField =~ m/^\.USER_XINFO_BEGIN\./ )
 		{
-			push( @newVED, $VEDField );
-			push( @newVED, ".NOTE. |a$newValue" );
-			print     "Appended: '$newValue'\n" if ($opt{'d'});
-			print LOG "Appended: '$newValue'\n";
+			print UPDATEPATRON "$VEDField\n";
+			print UPDATEPATRON ".NOTE. |a$noteField\n";
 		}
 		else
 		{
-			push(@newVED, $VEDField);
+			print UPDATEPATRON "$VEDField\n";
 		}
 	}
-	return @newVED;
 }
-my $patronFile = $WORK_DIR."/patron.flat";
-open UPDATEPATRON, ">$patronFile" or die "Error writing flat user file: $!\n";
-open USER_KEYS, ">".$WORK_DIR."/userkeys.lst" or die "Can't save user keys: $!\n";
-while (<>)
-{
-	print;
-	my $barcode = $_;
-	my $userKey = `echo "$barcode" | seluser -iB -oU -p"~LOSTCARD,MISSING,EPL-CANCEL,DISCARD"`;
-	chomp $userKey;
-	if ( not $userKey )
-	{
-		print LOG "user key $userKey has a profile of either LOSTCARD,MISSING,EPL-CANCEL,DISCARD and will not be processed.\n";
-		next;
-	}
-	print USER_KEYS "$userKey";
-	print  "$userKey";
-	my $flatUser = `echo "$userKey" | dumpflatuser`;
-	if ( not $flatUser )
-	{
-		print     "no patron found with barcode of '$barcode'.\n";
-		print LOG "no patron found with barcode of '$barcode'.\n";
-		next;
-	}
-	# Update the user's account. Now it turns out that on the recommendation of Margaret Pelfrey 
-	# you need get the entire record from dumpflatuser, modify the contents, and overlay the record
-	# over the original.
-	# 1) zero out the email. Now we have to remove the record not just empty it.
-	# `echo "$barCode||" | edituserved -b -eEMAIL -l"ADMIN|PCGUI-DISP" -t1`;
-	# 2) edit the note field to include previous notes and the requested message.
-	my @VEDFields = split( '\n', $flatUser );
-	my $noteField = $opt{'m'};
-	@VEDFields = updateNoteVED( $noteField, @VEDFields );
-	$flatUser  = "";
-	foreach ( @VEDFields )
-	{
-		$flatUser .= $_."\n";
-	}
-	# reload the user Replace address field, Replace extended information but DON'T create user if they don't exist.
-	print UPDATEPATRON "$flatUser";
-}
-close USER_KEYS;
+close PATRON;
 close UPDATEPATRON;
-if ($opt{'U'})
+if ( $opt{'U'} )
 {
 	# -aR replace address fields, -bR replace extended fields, -mu just update user never create, -n don't reference BRS
 	# This switch is necessary so that the loadflatuser doesn't check for ACTIVE_IDs for the customer, then failing if they
 	# have them. -n does create an entry in /s/sirsi/Unicorn/Database/Useredit, so touchkeys is not required.
-	`cat "$patronFile" | loadflatuser -aR -bR -l"ADMIN|PCGUI-DISP" -mu -n`;
+	`cat "$patronModifiedFile" | loadflatuser -aR -bR -l"ADMIN|PCGUI-DISP" -mu -n`;
 }
-close LOG;
 # EOF
