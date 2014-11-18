@@ -36,8 +36,6 @@ ARGS=-x
 put: test
 	scp ${LOCAL}${APP} ${USER}@${TEST_SERVER}:${REMOTE}
 	ssh ${USER}@${TEST_SERVER} '${REMOTE}${APP} ${ARGS}'
-get:
-	scp ${USER}@${TEST_SERVER}:${REMOTE}${APP} ${LOCAL}
 test:
 	perl -c ${APP}
 production: test

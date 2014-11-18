@@ -2,9 +2,15 @@
 
 Project Notes
 -------------
+This script was developed to cope with reciprocal borrowers. We have thousands, and we 
+want to add a note on all of their accounts to ask staff to change their accounts to 
+EPL-METRO. What ever your requirement, if you need to put a note on a lot of accounts
+this is the script for you. 
+
+It does not remove notes, merely adds a new one.
 
 Instructions for Running:
-./addnote
+cat user_barcodes.lst | addnote.pl -m"Message for note field." -U
 
 Product Description:
 Perl script written by Andrew Nisbet for Edmonton Public Library, distributable by the enclosed license.
