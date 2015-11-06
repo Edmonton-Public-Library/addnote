@@ -10,6 +10,8 @@ this is the script for you. While edituserved will do the same job, this script 
 the advantage that you just need all the user ids, not ids and notes pipe separated.
 Your choice.
 
+Neither method of adding notes affects the last activity date of the the customer.
+
 Note
 -----
 ```
